@@ -11,6 +11,8 @@ import com.example.wallet.transaction.TransactionType;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.wallet.event.WalletOperationEvent;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -21,12 +23,16 @@ public class AccountService {
 
     private final AccountRepository accountRepository;
     private final TransactionRepository transactionRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public AccountService(
             AccountRepository accountRepository,
-            TransactionRepository transactionRepository) {
+            TransactionRepository transactionRepository,
+            ApplicationEventPublisher eventPublisher) {
+
         this.accountRepository = accountRepository;
         this.transactionRepository = transactionRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -56,7 +62,18 @@ public class AccountService {
                 Instant.now()
         );
 
-        transactionRepository.save(transaction);
+        Transaction savedTransaction =
+                transactionRepository.save(transaction);
+
+        eventPublisher.publishEvent(
+                new WalletOperationEvent(
+                        savedTransaction.getId(),
+                        "DEPOSIT",
+                        null,
+                        account.getId(),
+                        amount
+                )
+        );
     }
 
     @Transactional
@@ -90,7 +107,18 @@ public class AccountService {
                 Instant.now()
         );
 
-        transactionRepository.save(transaction);
+        Transaction savedTransaction =
+                transactionRepository.save(transaction);
+
+        eventPublisher.publishEvent(
+                new WalletOperationEvent(
+                        savedTransaction.getId(),
+                        "WITHDRAW",
+                        account.getId(),
+                        null,
+                        amount
+                )
+        );
     }
 
     private void verifyAccountOwnership(Account account) {
