@@ -1,5 +1,6 @@
 package com.example.wallet.account;
 
+import com.example.wallet.account.dto.AccountResponse;
 import com.example.wallet.account.dto.DepositRequest;
 import com.example.wallet.account.dto.WithdrawRequest;
 import jakarta.validation.Valid;
@@ -39,9 +40,13 @@ public class AccountController {
     }
 
     @GetMapping
-    public ResponseEntity<List<Account>> getAllAccounts() {
-        return ResponseEntity.ok(accountService.getAllAccounts());
-    }
+    public ResponseEntity<List<AccountResponse>> getAllAccounts() {
+        List<AccountResponse> accounts = accountService.getAllAccounts()
+                .stream()
+                .map(AccountResponse::from)
+                .toList();
 
+        return ResponseEntity.ok(accounts);
+    }
 
 }

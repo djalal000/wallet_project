@@ -4,10 +4,7 @@ import com.example.wallet.exception.AccountBlockedException;
 import com.example.wallet.exception.AccountNotFoundException;
 import com.example.wallet.exception.ForbiddenOperationException;
 import com.example.wallet.exception.InsufficientBalanceException;
-import com.example.wallet.transaction.Transaction;
-import com.example.wallet.transaction.TransactionRepository;
-import com.example.wallet.transaction.TransactionStatus;
-import com.example.wallet.transaction.TransactionType;
+import com.example.wallet.transaction.*;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,15 +21,17 @@ public class AccountService {
     private final AccountRepository accountRepository;
     private final TransactionRepository transactionRepository;
     private final ApplicationEventPublisher eventPublisher;
-
+    private final WalletTransactionService walletTransactionService;
     public AccountService(
             AccountRepository accountRepository,
             TransactionRepository transactionRepository,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            WalletTransactionService walletTransactionService) {
 
         this.accountRepository = accountRepository;
         this.transactionRepository = transactionRepository;
         this.eventPublisher = eventPublisher;
+        this.walletTransactionService = walletTransactionService;
     }
 
     @Transactional
@@ -93,6 +92,12 @@ public class AccountService {
         }
 
         if (account.getBalance().compareTo(amount) < 0) {
+
+            walletTransactionService.recordFailedWithdrawal(
+                    account,
+                    amount
+            );
+
             throw new InsufficientBalanceException();
         }
 
