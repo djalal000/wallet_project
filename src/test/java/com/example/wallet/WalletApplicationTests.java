@@ -5,6 +5,7 @@ import com.example.wallet.account.AccountRepository;
 import com.example.wallet.account.AccountService;
 import com.example.wallet.account.AccountStatus;
 import com.example.wallet.exception.InsufficientBalanceException;
+import com.example.wallet.transfer.TransferService;
 import com.example.wallet.user.User;
 import com.example.wallet.user.UserRepository;
 
@@ -37,6 +38,9 @@ class WalletApplicationTests {
     private AccountService accountService;
 
     @Autowired
+    private TransferService transferService;
+
+    @Autowired
     private AccountRepository accountRepository;
 
     @Autowired
@@ -48,16 +52,6 @@ class WalletApplicationTests {
     //
     // Two withdrawals are executed concurrently
     // on the SAME account.
-    //
-    // Initial balance = 100
-    //
-    // Withdrawal 1 = 70
-    // Withdrawal 2 = 70
-    //
-    // Expected:
-    // One withdrawal succeeds.
-    // One withdrawal fails.
-    // Final balance = 30
     // =========================================================
 
     @Test
@@ -79,8 +73,6 @@ class WalletApplicationTests {
 
         Long accountId = account.getId();
 
-
-        // Used to make both threads wait before starting.
         CountDownLatch start = new CountDownLatch(1);
 
         ExecutorService executor =
@@ -92,7 +84,6 @@ class WalletApplicationTests {
 
             setUserAuthentication();
 
-            // Wait until both operations are ready.
             start.await();
 
             try {
@@ -115,7 +106,6 @@ class WalletApplicationTests {
 
             setUserAuthentication();
 
-            // Wait until both operations are ready.
             start.await();
 
             try {
@@ -134,11 +124,9 @@ class WalletApplicationTests {
         });
 
 
-        // Start both withdrawals concurrently.
         start.countDown();
 
 
-        // Wait for both operations to finish.
         String result1 = withdrawal1.get();
         String result2 = withdrawal2.get();
 
@@ -151,9 +139,6 @@ class WalletApplicationTests {
                         .orElseThrow();
 
 
-        // Only one withdrawal can succeed:
-        //
-        // 100 - 70 = 30
         assertEquals(
                 new BigDecimal("30.00"),
                 finalAccount.getBalance()
@@ -171,7 +156,6 @@ class WalletApplicationTests {
         }
 
 
-        // Exactly one withdrawal must succeed.
         assertEquals(
                 1,
                 successfulWithdrawals
@@ -184,16 +168,6 @@ class WalletApplicationTests {
     //
     // A deposit and a withdrawal are executed concurrently
     // on the SAME account.
-    //
-    // Initial balance = 100
-    //
-    // Deposit = 30
-    // Withdrawal = 200
-    //
-    // Expected:
-    // Deposit succeeds.
-    // Withdrawal fails.
-    // Final balance = 130
     // =========================================================
 
     @Test
@@ -227,7 +201,6 @@ class WalletApplicationTests {
 
             setUserAuthentication();
 
-            // Wait until both operations are ready.
             start.await();
 
             accountService.deposit(
@@ -243,7 +216,6 @@ class WalletApplicationTests {
 
             setUserAuthentication();
 
-            // Wait until both operations are ready.
             start.await();
 
             try {
@@ -262,11 +234,9 @@ class WalletApplicationTests {
         });
 
 
-        // Start both operations concurrently.
         start.countDown();
 
 
-        // Wait for both operations to finish.
         String depositResult = deposit.get();
         String withdrawalResult = withdrawal.get();
 
@@ -279,21 +249,18 @@ class WalletApplicationTests {
                         .orElseThrow();
 
 
-        // 100 + 30 = 130
         assertEquals(
                 new BigDecimal("130.00"),
                 finalAccount.getBalance()
         );
 
 
-        // Deposit must succeed.
         assertEquals(
                 "DEPOSIT_SUCCESS",
                 depositResult
         );
 
 
-        // Withdrawal of 200 must fail.
         assertEquals(
                 "INSUFFICIENT_BALANCE",
                 withdrawalResult
@@ -306,20 +273,6 @@ class WalletApplicationTests {
     //
     // Several operations are executed concurrently
     // on the SAME account.
-    //
-    // Initial balance = 100
-    //
-    // Deposit 30
-    // Deposit 50
-    // Withdraw 40
-    // Withdraw 20
-    //
-    // Expected:
-    //
-    // 100 + 30 + 50 - 40 - 20 = 120
-    //
-    // All operations should succeed.
-    // Final balance = 120
     // =========================================================
 
     @Test
@@ -410,11 +363,9 @@ class WalletApplicationTests {
         });
 
 
-        // Start all four operations concurrently.
         start.countDown();
 
 
-        // Wait for all operations to finish.
         String result1 = deposit1.get();
         String result2 = deposit2.get();
         String result3 = withdrawal1.get();
@@ -429,16 +380,12 @@ class WalletApplicationTests {
                         .orElseThrow();
 
 
-        // Expected:
-        //
-        // 100 + 30 + 50 - 40 - 20 = 120
         assertEquals(
                 new BigDecimal("120.00"),
                 finalAccount.getBalance()
         );
 
 
-        // All four operations must succeed.
         assertEquals("SUCCESS", result1);
         assertEquals("SUCCESS", result2);
         assertEquals("SUCCESS", result3);
@@ -447,10 +394,148 @@ class WalletApplicationTests {
 
 
     // =========================================================
-    // Authentication helper
+    // TEST 4
     //
-    // SecurityContextHolder is thread-local, so each worker
-    // thread needs its own authenticated user.
+    // Two transfers happen concurrently in opposite directions:
+    //
+    // Account A -> Account B
+    // Account B -> Account A
+    //
+    // This verifies that transfers do not deadlock
+    // and that both balances remain correct.
+    // =========================================================
+
+    @Test
+    @Order(4)
+    void oppositeTransfersShouldCompleteWithoutDeadlock()
+            throws Exception {
+
+        // Arrange
+        User user = userRepository.findByUsername("testuser")
+                .orElseThrow();
+
+
+        Account accountA = accountRepository.save(
+                new Account(
+                        user,
+                        new BigDecimal("100.00"),
+                        AccountStatus.ACTIVE
+                )
+        );
+
+
+        Account accountB = accountRepository.save(
+                new Account(
+                        user,
+                        new BigDecimal("100.00"),
+                        AccountStatus.ACTIVE
+                )
+        );
+
+
+        Long accountAId = accountA.getId();
+        Long accountBId = accountB.getId();
+
+
+        CountDownLatch start = new CountDownLatch(1);
+
+        ExecutorService executor =
+                Executors.newFixedThreadPool(2);
+
+
+        // Act
+
+        Future<String> transferAtoB = executor.submit(() -> {
+
+            setUserAuthentication();
+
+            start.await();
+
+            transferService.transfer(
+                    accountAId,
+                    accountBId,
+                    new BigDecimal("30.00")
+            );
+
+            return "SUCCESS";
+        });
+
+
+        Future<String> transferBtoA = executor.submit(() -> {
+
+            setUserAuthentication();
+
+            start.await();
+
+            transferService.transfer(
+                    accountBId,
+                    accountAId,
+                    new BigDecimal("20.00")
+            );
+
+            return "SUCCESS";
+        });
+
+
+        // Start both transfers at the same time.
+        start.countDown();
+
+
+        /*
+         * get() waits for both operations.
+         *
+         * If the locking strategy caused a deadlock,
+         * these operations could remain blocked.
+         */
+        String result1 = transferAtoB.get();
+        String result2 = transferBtoA.get();
+
+
+        executor.shutdown();
+
+
+        // Assert
+
+        Account finalAccountA =
+                accountRepository.findById(accountAId)
+                        .orElseThrow();
+
+
+        Account finalAccountB =
+                accountRepository.findById(accountBId)
+                        .orElseThrow();
+
+
+        /*
+         * Account A:
+         *
+         * 100 - 30 + 20 = 90
+         *
+         * Account B:
+         *
+         * 100 + 30 - 20 = 110
+         */
+
+        assertEquals(
+                new BigDecimal("90.00"),
+                finalAccountA.getBalance()
+        );
+
+
+        assertEquals(
+                new BigDecimal("110.00"),
+                finalAccountB.getBalance()
+        );
+
+
+        // Both transfers must succeed.
+        assertEquals("SUCCESS", result1);
+        assertEquals("SUCCESS", result2);
+    }
+
+
+    // =========================================================
+    // Authentication helper
     // =========================================================
 
     private void setUserAuthentication() {
