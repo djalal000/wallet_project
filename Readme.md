@@ -151,21 +151,21 @@ validation, and concurrent operations:
 /**
 * Integration tests for the wallet project.
 *
-* 1.  Valid login
-* 2.  Invalid password
-* 3.  Deposit
-* 4.  Negative deposit
-* 5.  Withdrawal
-* 6.  Insufficient balance
-* 7.  User cannot operate another user's account
-* 8.  Admin can view all accounts
-* 9.  Normal user cannot view all accounts
-* 10. Transfer between different users
-* 11. Transfer from and  to  the same account
-* 12. Concurrent withdrawals
-* 13. Concurrent deposit + withdrawal
-* 14. Multiple concurrent operations
-* 15. Opposite transfers / deadlock prevention
+*   Valid login
+*  Invalid password
+*  Deposit
+*  Negative deposit
+*   Withdrawal
+*   Insufficient balance
+*  User cannot operate another user's account
+*   Admin can view all accounts
+*   Normal user cannot view all accounts
+*  Transfer between different users
+*  Transfer from and  to  the same account
+*  Concurrent withdrawals
+*  Concurrent deposit + withdrawal
+*  Multiple concurrent operations
+*  Opposite transfers / deadlock prevention
 **/
 
 
@@ -173,23 +173,15 @@ validation, and concurrent operations:
 
 The project uses a simple layered architecture:
 
-Client
-   |
-   v
-Controller
-   |
-   v
-Service
-   |
-   v
-Repository
-   |
-   v
+Client -->
+Controller-->
+Service-->
+Repository-->
 PostgreSQL
 
 
-##################################################
-#####################################################
+###########################################
+
 
 ### Controller
 
