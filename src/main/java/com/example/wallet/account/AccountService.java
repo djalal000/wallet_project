@@ -43,6 +43,14 @@ public class AccountService {
         verifyAccountOwnership(account);
 
         if (account.getStatus() == AccountStatus.BLOCKED) {
+
+            walletTransactionService.recordFailedTransaction(
+                    account,
+                    null,
+                    amount,
+                    TransactionType.WITHDRAW
+            );
+
             throw new AccountBlockedException(accountId);
         }
 
@@ -84,6 +92,14 @@ public class AccountService {
         verifyAccountOwnership(account);
 
         if (account.getStatus() == AccountStatus.BLOCKED) {
+
+            walletTransactionService.recordFailedTransaction(
+                    null,
+                    account,
+                    amount,
+                    TransactionType.DEPOSIT
+            );
+
             throw new AccountBlockedException(accountId);
         }
 
@@ -93,9 +109,11 @@ public class AccountService {
 
         if (account.getBalance().compareTo(amount) < 0) {
 
-            walletTransactionService.recordFailedWithdrawal(
+            walletTransactionService.recordFailedTransaction(
                     account,
-                    amount
+                    null,
+                    amount,
+                    TransactionType.WITHDRAW
             );
 
             throw new InsufficientBalanceException();

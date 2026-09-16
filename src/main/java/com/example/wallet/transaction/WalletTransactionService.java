@@ -19,15 +19,17 @@ public class WalletTransactionService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void recordFailedWithdrawal(
-            Account account,
-            BigDecimal amount) {
+    public void recordFailedTransaction(
+            Account sourceAccount,
+            Account destinationAccount,
+            BigDecimal amount,
+            TransactionType type) {
 
         Transaction transaction = new Transaction(
-                account,
-                null,
+                sourceAccount,
+                destinationAccount,
                 amount,
-                TransactionType.WITHDRAW,
+                type,
                 TransactionStatus.FAILED,
                 Instant.now()
         );

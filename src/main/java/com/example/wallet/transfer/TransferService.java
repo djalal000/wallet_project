@@ -3,6 +3,7 @@ package com.example.wallet.transfer;
 import com.example.wallet.account.Account;
 import com.example.wallet.account.AccountRepository;
 import com.example.wallet.account.AccountStatus;
+import com.example.wallet.event.WalletOperationEvent;
 import com.example.wallet.exception.AccountBlockedException;
 import com.example.wallet.exception.AccountNotFoundException;
 import com.example.wallet.exception.ForbiddenOperationException;
@@ -11,11 +12,11 @@ import com.example.wallet.transaction.Transaction;
 import com.example.wallet.transaction.TransactionRepository;
 import com.example.wallet.transaction.TransactionStatus;
 import com.example.wallet.transaction.TransactionType;
+import com.example.wallet.transaction.WalletTransactionService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.example.wallet.event.WalletOperationEvent;
-import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -26,14 +27,18 @@ public class TransferService {
     private final AccountRepository accountRepository;
     private final TransactionRepository transactionRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final WalletTransactionService walletTransactionService;
+
     public TransferService(
             AccountRepository accountRepository,
             TransactionRepository transactionRepository,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            WalletTransactionService walletTransactionService) {
 
         this.accountRepository = accountRepository;
         this.transactionRepository = transactionRepository;
         this.eventPublisher = eventPublisher;
+        this.walletTransactionService = walletTransactionService;
     }
 
     @Transactional
@@ -54,7 +59,7 @@ public class TransferService {
             );
         }
 
-
+        // Always lock accounts in the same order.
         Long firstAccountId =
                 Math.min(sourceAccountId, destinationAccountId);
 
@@ -83,21 +88,44 @@ public class TransferService {
                         ? firstAccount
                         : secondAccount;
 
-
         verifyAccountOwnership(sourceAccount);
 
         if (sourceAccount.getStatus() == AccountStatus.BLOCKED) {
+
+            walletTransactionService.recordFailedTransaction(
+                    sourceAccount,
+                    destinationAccount,
+                    amount,
+                    TransactionType.TRANSFER
+            );
+
             throw new AccountBlockedException(sourceAccountId);
         }
 
         if (destinationAccount.getStatus() == AccountStatus.BLOCKED) {
+
+            walletTransactionService.recordFailedTransaction(
+                    sourceAccount,
+                    destinationAccount,
+                    amount,
+                    TransactionType.TRANSFER
+            );
+
             throw new AccountBlockedException(destinationAccountId);
         }
 
+        // Not enough money: record the failed transaction.
         if (sourceAccount.getBalance().compareTo(amount) < 0) {
+
+            walletTransactionService.recordFailedTransaction(
+                    sourceAccount,
+                    destinationAccount,
+                    amount,
+                    TransactionType.TRANSFER
+            );
+
             throw new InsufficientBalanceException();
         }
-
 
         // Remove money from source account.
         sourceAccount.setBalance(
@@ -108,7 +136,6 @@ public class TransferService {
         destinationAccount.setBalance(
                 destinationAccount.getBalance().add(amount)
         );
-
 
         // Record the successful transfer.
         Transaction transaction = new Transaction(
@@ -123,6 +150,7 @@ public class TransferService {
         Transaction savedTransaction =
                 transactionRepository.save(transaction);
 
+        // Trigger deferred audit/notification after successful commit.
         eventPublisher.publishEvent(
                 new WalletOperationEvent(
                         savedTransaction.getId(),
@@ -133,7 +161,6 @@ public class TransferService {
                 )
         );
     }
-
 
     private void verifyAccountOwnership(Account account) {
 

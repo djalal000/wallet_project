@@ -4,6 +4,7 @@ import com.example.wallet.account.Account;
 import com.example.wallet.auth.dto.LoginRequest;
 import com.example.wallet.auth.dto.LoginResponse;
 import com.example.wallet.exception.ForbiddenOperationException;
+import com.example.wallet.exception.InvalidCredentialsException;
 import com.example.wallet.user.User;
 import com.example.wallet.user.UserRepository;
 import com.example.wallet.security.JwtService;
@@ -32,7 +33,7 @@ public class AuthService {
                 .orElseThrow(() -> new RuntimeException("Invalid username or password"));
 
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-            throw new RuntimeException("Invalid username or password");
+            throw new InvalidCredentialsException();
         }
 
         String token = jwtService.generateToken(
